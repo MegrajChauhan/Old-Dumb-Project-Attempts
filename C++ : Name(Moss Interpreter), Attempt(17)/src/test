@@ -1,0 +1,652 @@
+#include<vector> #include<stack> #include<queue> #include<algorithm> #include<sstream> #include<string>
+#define SIG_SUCCESS "SUCCESS"
+#define SIG_FAILURE "ERROR"
+#define IS_NUM(x) ((x >= '0') && (x <= '9'))
+#define IS_ALPHA(x) ((x >= 'a' && x <= 'z') || (x >= 'A' && x <= 'Z'))
+#define OPERS(x) (x == '+' || x == '-' || x == '/' || x == '*')
+#define RED "\033[0;31m" 
+#define GREEN "\033[0;32m"
+#define YELLOW "\033[0;33m"
+#define WHITE "\033[0;37m"
+#define RESET "\033[0m"
+#define TYPE_NUM "TYPE_NUM"
+#define TYPE_FLOAT "TYPE_FLOAT"
+#define OPER_PLUS "PLUS"
+#define OPER_MINUS "MINUS"
+#define OPER_MUL "MUL"
+#define OPER_DIV "DIV"
+#define OPER_OPAREN "OPAREN"
+#define OPER_CPAREN "CPAREN"
+#define OPER_INC "INC"
+#define OPER_DEC "DEC"
+#define LEXING "LEXING"
+#define PARSING "PARSING"
+#define EXECUTING "EXECUTING"
+struct Global_
+{
+  std::string _file_name = "<stdin>";
+  std::string _line;
+  int line_number = 0;
+  int column = 0;
+  std::string current_context = LEXING;
+  inline void update_col(int column = 0){this->column += column;}
+  inline void update_new_line(std::string _new_line){_line = _new_line;}
+};
+Global_ global;
+#define FATAL "FATAL"
+#define WARNING "WARNING"
+#define UNKNOWN_TOKEN "UNKNOWN_TOKEN"
+#define STRAY_PARENTHESIS "STRAY PARENTHESIS"
+#define DIVIDE_BY_ZERO "DIV_BY_ZERO"
+#define INCORRECT_STATEMENT "INCORRECT_STATEMENT"
+#define EXPECTED_NUMBER "EXPECT_NUMBER"
+#define EXPRESSION "EXPR"
+struct Node
+{
+  std::string _type;
+  std::queue<std::pair<std::string, std::string>> _toks;
+};
+#define LINE "LINE" 
+std::vector<std::pair<std::string, std::string>> _oper_tokens = {
+    {OPER_PLUS, "+"}, {OPER_DIV, "/"}, {OPER_MINUS, "-"}, {OPER_MUL, "*"}, {OPER_CPAREN, ")"}, {OPER_OPAREN, "("}
+    ,{OPER_DEC, "--"}, {OPER_INC, "++"}
+};
+std::pair<std::string, std::string> get_operator_type(std::string _to_check)
+{
+  for (int i = 0; i < _oper_tokens.size(); i++)
+  {
+    if (_oper_tokens[i].second == _to_check)
+      return _oper_tokens[i];
+  }
+  return std::make_pair(SIG_FAILURE, "ERROR");
+}
+std::pair<std::string, std::string> get_num_type(std::string _to_check)
+{
+  int dot_count = 0;
+  std::string type = TYPE_NUM;
+  int count = 0;
+  if(_to_check[0] == '-')
+     count++;
+  for (int i = 0; i < _to_check.size(); i++)
+  {
+    if IS_NUM (_to_check[i])
+      count++;
+    else if (_to_check[i] == '.')
+    {
+      dot_count++;
+      count++;
+      type = TYPE_FLOAT;
+    }
+    if (dot_count > 1)
+      break;
+  }
+  if (dot_count == 1 && count == _to_check.size())
+    return std::make_pair(TYPE_FLOAT, _to_check);
+  else if (dot_count == 0 && count == _to_check.size())
+    return std::make_pair(TYPE_NUM, _to_check);
+  return std::make_pair(SIG_FAILURE, "ERROR");
+}
+inline int operator_prcedence(std::string _oper)
+{
+  if (
+      _oper == "+" || _oper == "-")
+    return 1;
+  else if(_oper == "*" || _oper == "/")
+    return 2;
+  else
+     return 0;
+}
+inline float _to_float(std::pair<std::string,std::string> _to_change)
+{
+  float ans;
+  try{
+    ans = std::stof(_to_change.second);
+  }catch(std::invalid_argument& arg)
+  {
+    return -1.00;
+  }
+  return ans;
+}
+
+inline double _to_double(std::string _to_change)
+{
+  double ans;
+  try{
+    ans = std::stod(_to_change);
+  }catch(std::invalid_argument& arg)
+  {
+    return -1.000000;
+  }
+  return ans;
+}
+inline int to_int(std::string num)
+{
+    return std::stoi(num);
+}
+inline std::string to_str(auto in)
+{
+    std::stringstream stream;
+    std::string str;
+    stream << in;
+    stream >> str;
+    return str;
+}
+inline std::string _solve(std::pair<std::string,std::string> left, std::pair<std::string,std::string> right, std::string _oper)
+{
+  auto left_val = (left.first == TYPE_FLOAT)? _to_double(left.second): to_int(left.second);
+  auto right_val = (right.first == TYPE_FLOAT)? _to_double(right.second): to_int(right.second);
+  if(_oper == "+")
+    return to_str(left_val + right_val);
+  else if(_oper == "-")
+    return to_str(right_val - left_val);
+  else if(_oper == "/")
+  {
+    std::string s = to_str(left_val);
+    if(left_val == 0)
+    {
+      err._error_level = FATAL;
+      err._error_type = DIVIDE_BY_ZERO;
+      global.column -= s.size();
+      err.err_length = s.length();
+      return SIG_FAILURE;
+    }
+    return to_str(right_val / left_val);
+  }
+  else if(_oper == "*")
+    return to_str(right_val * left_val);
+  return SIG_FAILURE;
+}
+class Parser
+{
+public:
+    Parser(std::vector<std::pair<std::string, std::string>> &_tok_list)
+        : _toks_list(_tok_list)
+    {
+        global.current_context = PARSING;
+        global.column = 0;
+        this->_current = this->_toks_list[0];
+    }
+
+    inline std::string parse()
+    {
+        std::size_t len = this->_toks_list.size();
+        while (ind < len)
+        {
+            if (_current.first == TYPE_FLOAT || _current.first == TYPE_NUM || _current.first == OPER_OPAREN || _current.first == OPER_MINUS || _current.first == OPER_INC || _current.first == OPER_DEC)
+            {
+                std::string res = this->parseExpr();
+                if (res == SIG_FAILURE) 
+                    return SIG_FAILURE;
+            }
+        }
+        return SIG_SUCCESS;
+    }
+    inline std::string parseExpr()
+    {
+        std::stack<std::pair<std::string, std::string>> _oper_stack;
+        std::queue<std::pair<std::string, std::string>> _final;
+        int o_paren = 0, c_paren = 0;
+        while (ind < this->_toks_list.size())
+        {
+            if (_current.first == TYPE_FLOAT || _current.first == TYPE_NUM)
+                _final.push(_current);
+            else if(ind == 0 && _current.second == "-" || ind >= 1 && !_oper_stack.empty() && _oper_stack.top().first == OPER_OPAREN && this->_toks_list[ind - 1].first != TYPE_FLOAT && this->_toks_list[ind - 1].first != TYPE_NUM)
+            {
+                _final.push(std::make_pair(TYPE_NUM, "0"));
+                ind++;
+                if(this->_toks_list[ind].first == TYPE_FLOAT || this->_toks_list[ind].first == TYPE_NUM || this->_toks_list[ind].first == OPER_OPAREN)
+                    ind--;
+                else{
+                    err.err_length = this->_toks_list[ind].second.length();
+                    err._error_level = FATAL;
+                    err._error_type = EXPECTED_NUMBER;
+                    return SIG_FAILURE;
+                }
+                _oper_stack.push(_current);
+            }
+            else if(_current.first == OPER_DEC || _current.first == OPER_INC)
+            {
+                if(_current.first == OPER_DEC)
+                {
+                    _final.push(std::make_pair(TYPE_NUM, "0"));
+                    _final.push(std::make_pair(TYPE_NUM, "1"));
+                    _oper_stack.push(std::make_pair(OPER_MINUS, "-"));
+                    _oper_stack.push(std::make_pair(OPER_MINUS, "-"));
+                }else if(_current.first == OPER_INC)
+                {
+                    _final.push(std::make_pair(TYPE_NUM, "1"));
+                    _oper_stack.push(std::make_pair(OPER_MINUS, "+"));
+                }
+            }
+            else if (_current.first == OPER_PLUS || _current.first == OPER_DIV || _current.first == OPER_MINUS || _current.first == OPER_MUL)
+            {
+                while (!_oper_stack.empty() && operator_prcedence(_oper_stack.top().second) >= operator_prcedence(_current.second))
+                {
+                    _final.push(_oper_stack.top());
+                    _oper_stack.pop();
+                }
+                _oper_stack.push(_current);
+            }
+            else if (_current.first == OPER_OPAREN)
+            {
+                _oper_stack.push(_current);
+                o_paren++;
+            }
+            else if (_current.first == OPER_CPAREN)
+            {
+                while (!_oper_stack.empty() && _oper_stack.top().second != "(")
+                {
+                    std::pair<std::string, std::string> t = _oper_stack.top();
+                    _oper_stack.pop();
+                    while (!_oper_stack.empty() && (operator_prcedence(_oper_stack.top().second) >= operator_prcedence(t.second)))
+                    {
+                        _final.push(_oper_stack.top());
+                        _oper_stack.pop();
+                    }
+                    _final.push(t);
+                    c_paren++;
+                }
+                if (!_oper_stack.empty())
+                    _oper_stack.pop();
+                else
+                {
+                    err._error_type = STRAY_PARENTHESIS;
+                    err._error_level = FATAL;
+                    return SIG_FAILURE;
+                }
+            }
+            ind++;
+            if (ind < this->_toks_list.size())
+                _current = this->_toks_list[ind];
+        global.update_col(_current.second.size());
+        }
+        while (!_oper_stack.empty() && operator_prcedence(_oper_stack.top().second) >= operator_prcedence(_current.second))
+        {
+            _final.push(_oper_stack.top());
+            _oper_stack.pop();
+        }
+        while (!_oper_stack.empty())
+        {
+            _final.push(_oper_stack.top());
+            _oper_stack.pop();
+        }
+        if(c_paren != o_paren)
+        {
+            err._error_level = FATAL;
+            err._error_type = INCORRECT_STATEMENT;
+            global.column = 0;
+            err.err_length = global._line.size();
+            return SIG_FAILURE;
+        }
+        Node node;
+        node._type = EXPRESSION;
+        ExprExecuter par(_final);
+        std::string __res = par._execute_expression();
+        if (__res != SIG_FAILURE)
+        {
+            node._toks.push(get_num_type(__res));
+            this->node_list.push_back(node);
+        }else
+            return SIG_FAILURE;
+        return SIG_SUCCESS;
+    }
+
+    inline std::vector<Node> _get_nodes()
+    {
+        return this->node_list;
+    }
+
+private:
+    std::vector<std::pair<std::string, std::string>> _toks_list;
+    std::vector<Node> node_list;
+    std::size_t ind = 0;
+    std::pair<std::string, std::string> _current;
+};
+class Lexer
+{
+public:
+    Lexer() = default;
+    inline std::string lex()
+    {
+        std::size_t index = 0;
+        char current = global._line[0];
+        while (index < global._line.size() && current != '`')
+        {
+            if (current == ' ')
+            {
+                index++;
+                global.update_col(1);
+            }
+            else if IS_NUM (current)
+            {
+                std::string _temp;
+                while (IS_NUM(current) || (current == '.') && current != '`')
+                {
+                    _temp += current;
+                    index++;
+                    current = global._line[index];
+                }
+                std::pair<std::string, std::string> _num_type = get_num_type(_temp);
+                if (_num_type.first != SIG_FAILURE)
+                {
+                    this->_tok_list.push_back(_num_type);
+                    global.update_col(_num_type.second.size());
+                }
+                else
+                {
+                    err.err_length = _temp.size();
+                    err._error_type = UNKNOWN_TOKEN;
+                    return SIG_FAILURE;
+                }
+            }
+            else if OPERS (current)
+            {
+                std::string _temp;
+                _temp += current;
+                index++;
+                current = global._line[index];
+                if ((_temp == "+" || _temp == "-") && (current == '+' || current == '-') && (OPERS(current))) // this is where the possible double operators are defined
+                {
+                    _temp += current;
+                    index++;
+                    global.update_col(2);
+                }
+                else if(OPERS(current))
+                {
+                    err.err_length = _temp.size() + 1;
+                    err._error_type = UNKNOWN_TOKEN;
+                    return SIG_FAILURE;
+                }
+                this->_tok_list.push_back(get_operator_type(_temp));
+            }
+            else if(current == '(' || current == ')')
+            {
+                index++;
+                std::string _temp;
+                _temp += current;
+                 this->_tok_list.push_back(get_operator_type(_temp));
+            }
+            else
+            {
+                err.err_length = global._line.size() - 1;
+                err._error_type = UNKNOWN_TOKEN;
+                return SIG_FAILURE;
+            }
+            current = global._line[index];
+        }
+        return SIG_SUCCESS;
+    }
+    
+    inline std::vector<std::pair<std::string,std::string>>& get_tokens()
+    {
+        return _tok_list;
+    }
+
+private:
+    std::vector<std::pair<std::string, std::string>> _tok_list;
+};
+class ExprExecuter
+{
+public:
+    ExprExecuter(std::queue<std::pair<std::string,std::string>>& toks)
+    {
+        this->_nodes = toks;
+    }
+    inline std::string _execute_expression()
+    {
+        std::stack<std::pair<std::string, std::string>> _num_stack;
+        std::size_t len = this->_nodes.size();
+        std::size_t ind = 0;
+        std::pair<std::string,std::string> _curr = this->_nodes.front();
+        while (ind < len)
+        {
+            if(_curr.first == TYPE_FLOAT || _curr.first == TYPE_NUM)
+               _num_stack.push(_curr);
+            else if (_curr.first == OPER_PLUS || _curr.first == OPER_DIV || _curr.first == OPER_MINUS || _curr.first == OPER_MUL)
+            {
+                std::pair<std::string, std::string> _left = _num_stack.top();
+                _num_stack.pop();
+                std::pair<std::string, std::string> _right = _num_stack.top();
+                _num_stack.pop();
+                std::string res = _solve(_left, _right, _curr.second);
+                if(res != SIG_FAILURE)
+                    _num_stack.push(get_num_type(res));
+                else
+                    return SIG_FAILURE;
+            }
+            this->_nodes.pop();
+            ind++;
+            if(ind < len)
+               _curr = this->_nodes.front();
+        }
+        return _num_stack.top().second;
+    }
+
+private:
+    std::queue<std::pair<std::string,std::string>> _nodes;
+};
+
+struct Error
+{
+    std::string _error_type;
+    std::string _error_level = FATAL;
+    int err_length;
+    std::string _str;
+};
+
+Error err;
+
+inline void error_print_unknown_token()
+{
+    std::cout << "In file: " << global._file_name << ":" << global.line_number << " : " << global.column + 1 << " : " << std::endl;
+    std::cout << "Error: " << RED + err._error_level + RESET << " :err code: 101: Unknown Token type"
+              << " : While " << global.current_context << std::endl;
+    std::cout << "In line: " << std::endl
+              << "`" << global._line << std::endl;
+    std::string _disp_;
+    for (int i = 0; i <= global.column; i++)
+    {
+        _disp_ += " ";
+    }
+    for (int i = 0; i < err.err_length; i++)
+    {
+        _disp_ += "^";
+    }
+    std::cout << _disp_ << std::endl;
+    std::cout << "Token type not supported or not defined" << std::endl;
+}
+
+inline void stray_parenthesis()
+{
+    std::cout << "In file: " << global._file_name << ":" << global.line_number << " : " << global.column + 1 << " : " << std::endl;
+    std::cout << "Error: " << RED + err._error_level + RESET << " :err code: 102: Expected a opening parenthesis here: A closing parenthesis without opening: Stray parenthesis"
+              << " : While " << global.current_context << std::endl;
+    std::cout << "In line: " << std::endl
+              << "`" << global._line << std::endl;
+    std::string _disp;
+    for (int i = 0; i <= global.column; i++)
+    {
+        _disp += " ";
+    }
+    _disp += "^";
+    std::cout << _disp << std::endl;
+    std::cout << "Unopened closing parenthesis" << std::endl;
+}
+
+inline void div_by_zero()
+{
+    global._line.erase(std::remove_if(global._line.begin(), global._line.end(), [](unsigned char c)
+                                      { return std::isspace(c); }),
+                       global._line.end());
+    std::cout << "In file: " << global._file_name << ":" << global.line_number << " : " << global.column + 1 << " : " << std::endl;
+    std::cout << "Error: " << RED + err._error_level + RESET << " :err code: 103: Divide by zero"
+              << " : While " << global.current_context << std::endl;
+    std::cout << "In line: " << std::endl
+              << "`" << global._line << std::endl;
+    std::string _disp_;
+    for (int i = 0; i <= global.column; i++)
+    {
+        _disp_ += " ";
+    }
+    for (int i = 0; i < err.err_length; i++)
+    {
+        _disp_ += "^";
+    }
+    std::cout << _disp_ << std::endl;
+    std::cout << "The dividend cannot be zero." << std::endl;
+}
+
+inline void incorrect_statement()
+{
+    std::cout << "In file: " << global._file_name << ":" << global.line_number << " : " << global.column + 1 << " : " << std::endl;
+    std::cout << "Error: " << RED + err._error_level + RESET << " :err code: 104: Incorrect statement: Syntatically incorrect"
+              << " : While " << global.current_context << std::endl;
+    std::cout << "In line: " << std::endl
+              << "`" << global._line << std::endl;
+    std::string _disp_ = " ";
+    for (int i = 0; i < err.err_length - 1; i++)
+    {
+        _disp_ += "^";
+    }
+    std::cout << _disp_ << std::endl;
+    std::string msg = "Note: This is caused by many factors in the statement. Please recheck the statement.";
+    std::cout << WHITE + msg + RESET << std::endl;
+}
+
+inline void expected_a_number()
+{
+    global._line.erase(std::remove_if(global._line.begin(), global._line.end(), [](unsigned char c)
+                                      { return std::isspace(c); }),
+                       global._line.end());
+    std::cout << "In file: " << global._file_name << ":" << global.line_number << " : " << global.column + 1 << " : " << std::endl;
+    std::cout << "Error: " << RED + err._error_level + RESET << " :err code: 105: Expected a number here"
+              << " : While " << global.current_context << std::endl;
+    std::cout << "In line: " << std::endl
+              << "`" << global._line << std::endl;
+    std::string _disp_ = " ";
+    for (int i = 0; i < global.column; i++)
+    {
+        _disp_ += " ";
+    }
+    for (int i = 0; i < err.err_length; i++)
+    {
+        _disp_ += "^";
+    }
+    std::cout << _disp_ << std::endl;
+}
+
+inline void decode()
+{
+    std::string _err_type = err._error_type;
+    if (_err_type == UNKNOWN_TOKEN)
+        error_print_unknown_token();
+    else if (_err_type == STRAY_PARENTHESIS)
+        stray_parenthesis();
+    else if (_err_type == DIVIDE_BY_ZERO)
+        div_by_zero();
+    else if (_err_type == INCORRECT_STATEMENT)
+        incorrect_statement();
+    else if(_err_type == EXPECTED_NUMBER)
+        expected_a_number();
+}
+class ByteGen
+{
+  public:
+  ByteGen(Parser& nodes)
+  {
+    this->_nodes = nodes._get_nodes();
+  }
+  inline void generate_bytecode()
+  {
+    std::size_t len = this->_nodes.size();
+    std::size_t ind = 0;
+    while(ind < len)
+    {
+        if(_nodes[ind]._type == EXPRESSION)
+            __bytecode.push_back(std::make_pair(LINE, _nodes[ind]._toks));
+        ind++;
+    }
+  }
+
+  inline std::vector<std::pair<std::string,std::queue<std::pair<std::string,std::string>>>> get_code()
+  {
+    return this->__bytecode;
+  }
+
+  private:
+  std::vector<std::pair<std::string,std::queue<std::pair<std::string,std::string>>>> __bytecode;
+  std::vector<Node> _nodes;
+};
+class ByteCode_read
+{
+    public:
+    ByteCode_read(ByteGen &gen)
+    {
+        this->_codes = gen.get_code();
+    }
+    inline void read()
+    {
+        std::size_t len = this->_codes.size();
+        std::size_t ind = 0;
+        while (ind < len)
+        {
+            if(this->_codes[ind].first == LINE)
+                std::cout<<this->_codes[ind].second.front().second<<std::endl;
+            ind++;
+        }
+    }
+
+private:
+    std::vector<std::pair<std::string, std::queue<std::pair<std::string, std::string>>>> _codes;
+};
+
+class Context
+{
+public:
+  Context()
+  {
+    global.column = 0;
+    global.line_number = 1;
+  }
+  inline std::string read_line()
+  {
+    std::string _line;
+    std::getline(std::cin, _line);
+    return _line + "`";
+  }
+
+  inline void execute()
+  {
+    std::string _val;
+    while (true)
+    {
+      std::cout << ">>>";
+      _val = read_line();
+      Lexer lexer;
+      global.update_new_line(_val);
+      global.current_context = LEXING;
+      std::string __res = lexer.lex();
+      if (__res == SIG_FAILURE)
+        decode();
+      else
+      {
+        Parser parser(lexer.get_tokens());
+        __res = parser.parse();
+        if (__res == SIG_FAILURE)
+          decode();
+        else
+        {
+          ByteGen gen(parser);
+          gen.generate_bytecode();
+          ByteCode_read read(gen);
+          read.read();
+        }
+      }
+    }
+  }
+};
+int main()
+{
+    Context c;
+    c.execute();
+}

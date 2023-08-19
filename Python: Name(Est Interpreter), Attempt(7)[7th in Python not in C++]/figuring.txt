@@ -1,0 +1,14 @@
+func main()
+{
+    num p = 0;
+}
+
+//the compiler sees "num" and peeks to see if there is a ( or , or = or ;
+there can be two things here: either function declaration or variable declaration
+if there are variable declaration inside the function then the variable declaration parsing function is called
+
+num----------|    
+dec--------| |
+           | |
+            ID-----------EQ------NUM|DEC------EOL---------register as var declr
+                         EOL----- register as var declr

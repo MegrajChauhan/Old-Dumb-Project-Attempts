@@ -1,0 +1,4 @@
+V4 Math expression parser: Should do everything it's predecessor could do. Should be able to handle exceptions and errors
+                           Should have some extra features. New technique and optimized code
+
+                           error_handler.hpp: has the power to stop the program completely if exceptions or errors were found

@@ -1,0 +1,12 @@
+some basic rules:
+data types: num, dec, bool, string, char
+currently almost every keywords are accepted that are available in modern languages
+implementations of detecting string and characters will be left to the parser
+
+Parser is divided into different parts capable of doing specific tasks:
+ExprParser: Parses expression such as the mathematical expressions, etc
+            Able to parse complex mathematical expressions, strings, chars etc
+
+Variables have the following properties: name, value, type, scope
+
+May 3: 3:29PM: Successfully wired up the parser, executer and ExprParser. The interpreter is doing everything as intended

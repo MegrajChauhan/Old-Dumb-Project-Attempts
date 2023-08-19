@@ -1,0 +1,14 @@
+Grammer:
+In the context of Moss language, expressions are the collection of numbers and operators. If any arithmetic operation is done on variables then it is also an expresison.
+Since, the bytecode generator and bytecode readers assume that the code is error proof, the code must be error proof before it is executed
+
+May 6, 5:06PM: The interpreter is still dumb. It can parse mathematical expressions only as of now. 
+               Complex as well as simple mathematical expressions with unary support as well. The interpreter can handle a lot of errors elegantly
+May 6, 9:09PM: The interpreter is still dumb but a bit intelligent. It can now parse strings, characters and add them
+               with error handling. Pretty cool! Now to Boolean Algebra!
+May 7, 10:00AM: The interpreter is capable of doing Boolean algebra on the new tokens, true and false, as well as numbers. Now for variable declaration
+
+A variable declaration in Moss will be:
+Type(string/num/float/char/bool) name = value;
+else
+Type(string/num/float/char/bool) name;
